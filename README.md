@@ -30,6 +30,24 @@ The privacy rules live in the database itself, so even someone who edits the web
 
 If `config.js` is left empty, the app runs in demo mode and saves only to that browser.
 
+## Calendars
+
+**Your calendars in Callsheet.** Settings → *Your calendars* → paste a calendar link: Apple (public calendar link), Google (secret iCal address), Outlook (published ICS link), or a rota app like Deputy. Callsheet shows those events and plans creative time around them, with a gap around work shifts. It only reads them. They refresh when you open the app (at most every 20 minutes) and when you press *Sync now*.
+
+**Callsheet in your calendar.** The same page has *Add to Apple Calendar* and *Add to Google Calendar* buttons. They subscribe your calendar app to a private link with your booked sessions, events and followed deadlines. Apple refreshes about hourly; Google can take several hours. *Make a new link* turns the old one off.
+
+Both run through a small free Supabase server function (`supabase/functions/calendar`), because browsers can't read other sites' calendars directly.
+
+## Server updates (one-time setup)
+
+Database changes (`supabase/migrations`) and server functions (`supabase/functions`) are deployed by GitHub Actions whenever they change:
+
+1. In Supabase, open your account menu (top right) → **Account preferences → Access Tokens → Generate new token**. Name it `github` and copy it.
+2. On GitHub, open this repo's **Settings → Secrets and variables → Actions → New repository secret**. Name: `SUPABASE_ACCESS_TOKEN`; value: the token.
+3. Open the **Actions** tab → **Update Supabase** → **Run workflow**.
+
+To do it by hand instead: run each file in `supabase/migrations` in the SQL Editor. Then go to **Edge Functions → Deploy a new function → Via editor**, name it `calendar`, paste in `supabase/functions/calendar/index.ts` and deploy. Finally, in that function's settings, turn **Verify JWT** off.
+
 ## Moving over from the Claude version
 
 Sign in, go to **Settings → Account → Import file**, and choose the export file. Projects, tasks, deadlines, jobs, songs, settings, covers and documents all come across.

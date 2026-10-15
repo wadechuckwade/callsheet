@@ -17,7 +17,7 @@ assert '/_blob/' not in s, [m.start() for m in re.finditer('/_blob/', s)][:5]
 
 # ---- storage layer → Supabase backend
 a = s.index("async function put(col, doc){"); b = s.index("function touchProject(pid)")
-s = s[:a] + open(os.path.join(HERE, 'chunk_backend.js')).read() + "\n" + s[b:]
+s = s[:a] + open(os.path.join(HERE, 'chunk_backend.js')).read() + "\n" + open(os.path.join(HERE, 'chunk_calendar.js')).read() + "\n" + s[b:]
 
 # ---- per-project read-only for shared projects
 rep("  const st = stageIdx(p); const ro = !S.canWrite; const SG = stagesFor(p.medium);", "  const st = stageIdx(p); const ro = !S.canWrite || isRO('projects', p); const SG = stagesFor(p.medium);")
@@ -128,6 +128,33 @@ rep("  if (el.dataset.act === 'job-status') {", r"""  if (el.dataset.act === 'sh
 # import via file input
 rep("  if (!f || !S.assets) return;\n  if (mode === 'font') {", "  if (f && mode === 'import') { importJSON(f); return; }\n  if (!f || !S.assets) return;\n  if (mode === 'font') {")
 
+
+# ---- linked calendars (Apple / Google / Outlook / Deputy via .ics) and the Callsheet feed
+rep("  if (S.mcp) setTimeout(() => gcLoadRange(rf, rt), 0);", "  if (S.mcp) setTimeout(() => gcLoadRange(rf, rt), 0); else if (icsOn()) setTimeout(() => icsLoad(false), 0);")
+rep("""  if (!S.mcp) gnote = `<span class="gc-note">${ic('calendar')} Google Calendar isn’t linked in this view, so only Callsheet items show.</span>`;""",
+"""  if (icsOn()) { const nL = calLinks().length;
+    gnote = !nL ? `<span class="gc-note">${ic('calendar')} Link Apple, Google or work calendars to plan around them. <button class="btn small" data-act="cal-link-go">Link a calendar</button></span>`
+      : S.gcalState === 'loading' ? `<span class="gc-note">${ic('clock')} Updating your calendars…</span>`
+      : S.gcalState === 'error' ? `<span class="gc-note err">${ic('calendar')} ${esc(S.gcalMsg)} <button class="btn small" data-act="gc-refresh">Try again</button></span>`
+      : `<span class="gc-note ok">${ic('check')} ${nL === 1 ? esc(calLinks()[0].name) : nL + ' calendars'}${S.gcalAt ? ' · updated ' + new Date(S.gcalAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : ''}${Object.keys(S.icsErr || {}).length ? ` · <button class="linkish err-t" data-act="cal-link-go">${Object.keys(S.icsErr).length} not working</button>` : ''} <button class="iconbtn" data-act="gc-refresh" aria-label="Update calendars" title="Update">${ic('trend')}</button></span>`; }
+  else if (!S.mcp) gnote = `<span class="gc-note">${ic('calendar')} Calendars can be linked once you’re signed in.</span>`;""")
+rep("  if (a === 'gc-refresh') {", """  if (a === 'gc-refresh' && icsOn()) { await icsLoad(true); toast(S.gcalState === 'ok' ? 'Calendars updated' : (S.gcalMsg || 'Couldn’t update')); return; }
+  if (a === 'cal-link-go') { S.tab = 'settings'; render(); setTimeout(() => { const x = $('#cal-links'); if (x) x.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); return; }
+  if (a === 'cl-del') { const l = calLinks().find(x => x.id === el.dataset.id); if (!l) return; if (!el.classList.contains('armed')) { el.classList.add('armed'); el.title = 'Tap again to remove'; toast('Tap the bin again to remove ' + l.name); return; }
+    saveSettings({ cal: { ...(CFG().cal || {}), links: calLinks().filter(x => x.id !== l.id), ...(l.id === 'deputy' ? { deputyUrl: '' } : l.id === 'apple' ? { appleUrl: '' } : {}) } });
+    Object.keys(S.gcal || {}).forEach(d => { S.gcal[d] = S.gcal[d].filter(g => g.src !== l.id); }); if (S.icsErr) delete S.icsErr[l.id]; render(); toast('Removed ' + l.name); return; }
+  if (a === 'feed-copy') { try { await navigator.clipboard.writeText(el.dataset.u); toast('Calendar link copied'); } catch(_){ infoModal('Your Callsheet calendar link', `<input type="text" value="${esc(el.dataset.u)}" style="width:100%" readonly>`); } return; }
+  if (a === 'feed-reset') { if (!el.classList.contains('armed')) { el.classList.add('armed'); el.textContent = 'tap again to confirm'; return; } await feedToken(true); render(); toast('New link made. Add it to your calendar again; the old one has stopped working.'); return; }
+  if (a === 'gc-refresh') {""")
+rep("    if (S.mcp && S.gcalState !== 'ok') {", "    if (icsOn() && calLinks().length && S.gcalState !== 'ok') await icsLoad(true);\n    if (S.mcp && S.gcalState !== 'ok') {")
+rep("""<p class="hint">From Google Calendar. Change it there.</p>`""", """<p class="hint">From ${esc(g.cal || 'Google Calendar')}. Change it there.</p>`""")
+rep("""  const g = !S.mcp ? `<p class="hint">Syncing with Google Calendar, Apple Calendar and Deputy is coming in a later update. Planning, sessions and events all work already.</p>`""", """  const g = !S.mcp ? ''""")
+rep("  h += calSettings();", "  h += linkedCalSettings() + calSettings();")
+rep("  if (e.target.id === 'auth-form') {", "  if (e.target.id === 'callink-form') { e.preventDefault(); calLinkSubmit(); return; }\n  if (e.target.id === 'auth-form') {")
+rep("  if (el.dataset.act === 'sh-role') {", """  if (el.dataset.act === 'cl-kind') { const work = el.value === '1'; saveSettings({ cal: { ...(CFG().cal || {}), links: calLinks().map(l => l.id === el.dataset.id ? { ...l, work } : l) } });
+    Object.values(S.gcal || {}).forEach(arr => arr.forEach(g => { if (g.src === el.dataset.id) g.shift = work; })); render(); toast(work ? 'Treated as work shifts' : 'Treated as personal'); return; }
+  if (el.dataset.act === 'sh-role') {""")
+
 # ---- boot
 a = s.index("/* ---------- boot ---------- */"); b = s.index("})();\n</script>", a)
 s = s[:a] + r"""/* ---------- boot ---------- */
@@ -141,7 +168,8 @@ async function start(user){
     await loadAll(); subscribe();
   } catch(e){ $('#view').innerHTML = `<div class="sheet"><div class="empty"><strong>Couldn’t open your planner</strong>${esc(e.message || 'Check your connection and reload.')}</div></div>`; return; }
   if (!CFG().onboarded) { onboarding(); return; }
-  render();
+  icsRestore(); render(); icsLoad(false);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') icsLoad(false); });
 }
 async function boot(){
   if (!CFG_OK) { S.mode = 'local'; loadLocal(); S.loaded = new Set(COLS); render(); return; }
@@ -179,6 +207,9 @@ s = head + s[:_i] + "\n</head>\n<body>\n" + s[_i:] + "\n</body>\n</html>\n"
 
 # ---- extra styles
 css = """
+.cl-add-form{margin-top:10px}.howto{flex:1;min-width:0}.howto summary{cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;padding:6px 0}.howto p{font-size:13px;line-height:1.55;margin:8px 0}
+.feed-btns{display:flex;flex-wrap:wrap;gap:8px}.feed-btns a.btn{text-decoration:none}.feed-card p{line-height:1.5}#cal-links .err-t{color:var(--danger)}
+
 .pf-links{display:grid;gap:8px}.pf-links .lbl{font-size:13px;font-weight:600;color:var(--muted)}
 #profile-form .check-field{margin-top:6px}
 
