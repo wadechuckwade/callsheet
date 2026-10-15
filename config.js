@@ -3,6 +3,6 @@
 // Both are safe to publish: the anon key can only do what the database's security rules allow.
 // Leave them empty to run Callsheet in demo mode (everything saved in this browser only).
 window.CS_CONFIG = {
-  url: '',
-  anonKey: ''
+  url: 'https://vhmqbtvxnkhgjipsbwhw.supabase.co',
+  anonKey: 'sb_publishable_D4bMEsYQ0TQnGKWXVuM0Ag_ORKaAOKA'
 };
